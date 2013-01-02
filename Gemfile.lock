@@ -1,0 +1,22 @@
+PATH
+  remote: .
+  specs:
+    rack-ratelimit (1.0.0)
+      dalli
+      rack
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    dalli (2.6.0)
+    minitest (4.3.3)
+    rack (1.4.1)
+    rake (10.0.3)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  minitest
+  rack-ratelimit!
+  rake
