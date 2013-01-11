@@ -25,6 +25,7 @@ module Rack
     #
     # Optional configuration:
     #   name: name of the rate limiter. Defaults to 'HTTP'. Used in messages.
+    #   status: HTTP response code. Defaults to 429.
     #   conditions: array of procs that take a rack env, all of which must
     #     return true to rate-limit the request.
     #   exceptions: array of procs that take a rack env, any of which may
@@ -38,10 +39,11 @@ module Rack
     #
     # Example:
     #
-    # Rate-limit bursts of POST/PUT/DELETE requests by IP address:
+    # Rate-limit bursts of POST/PUT/DELETE by IP address, return 503:
     #   use Rack::Ratelimit, name: 'POST',
     #     exceptions: ->(env) { env['REQUEST_METHOD'] == 'GET' },
     #     rate:   [50, 10.seconds],
+    #     status: 503,
     #     cache:  Dalli::Client.new,
     #     logger: Rails.logger) { |env| Rack::Request.new(env).ip }
     #
@@ -57,6 +59,7 @@ module Rack
 
       @name = options.fetch(:name, 'HTTP')
       @max, @period = options.fetch(:rate)
+      @status = options.fetch(:status, 429)
 
       @counter = Counter.new(options.fetch(:cache), @name, @period)
 
@@ -94,7 +97,7 @@ module Rack
     #   * Classify the request by IP, API token, etc.
     #   * Calculate the end of the current time window.
     #   * Increment the counter for this classification and time window.
-    #   * If count exceeds limit, return a 503 response.
+    #   * If count exceeds limit, return a 429 response.
     #   * If it's the first request that exceeds the limit, log it.
     #   * If the count doesn't exceed the limit, pass through the request.
     def call(env)
@@ -110,14 +113,14 @@ module Rack
 
         json = %({"name":"#{@name}","period":#{@period},"limit":#{@max},"remaining":#{remaining},"until":"#{time}"})
 
-        # If exceeded, return a 503 Service Unavailable response.
+        # If exceeded, return a 429 Rate Limit Exceeded response.
         if remaining <= 0
           # Only log the first hit that exceeds the limit.
           if @logger && remaining == 0
             @logger.info '%s: %s exceeded %d request limit for %s' % [@name, classification, @max, time]
           end
 
-          [ 503,
+          [ @status,
             { 'X-Ratelimit' => json, 'Retry-After' => @period.to_s },
             [@error_message] ]
 

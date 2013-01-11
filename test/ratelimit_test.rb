@@ -46,10 +46,10 @@ class RatelimitTest < MiniTest::Unit::TestCase
     assert_equal '', @out.string
   end
 
-  def test_responds_with_503_if_request_rate_exceeds_limit
+  def test_responds_with_429_if_request_rate_exceeds_limit
     assert_equal 200, @limited.call('limit-by' => 'key').first
     status, headers, body = @limited.call('limit-by' => 'key')
-    assert_equal 503, status
+    assert_equal 429, status
     assert_equal '10', headers['Retry-After']
     assert_match '0', headers['X-Ratelimit']
     assert_match %r({"name":"one","period":10,"limit":1,"remaining":0,"until":".*"}), headers['X-Ratelimit']
@@ -57,11 +57,17 @@ class RatelimitTest < MiniTest::Unit::TestCase
     assert_match /one: classification exceeded 1 request limit for/, @out.string
   end
 
+  def test_optional_response_status
+    app = Rack::Ratelimit.new(@app, rate: [1, 10], status: 503, cache: @cache)
+    assert_equal 200, app.call('limit-by' => 'key').first
+    assert_equal 503, app.call('limit-by' => 'key').first
+  end
+
   def test_doesnt_log_on_subsequent_rate_limited_requests
     assert_equal 200, @limited.call('limit-by' => 'key').first
-    assert_equal 503, @limited.call('limit-by' => 'key').first
+    assert_equal 429, @limited.call('limit-by' => 'key').first
     out = @out.string.dup
-    assert_equal 503, @limited.call('limit-by' => 'key').first
+    assert_equal 429, @limited.call('limit-by' => 'key').first
     assert_equal out, @out.string
   end
 
