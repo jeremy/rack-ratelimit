@@ -40,7 +40,7 @@ Examples
 
 Rate-limit bursts of POST/PUT/DELETE requests by IP address
 
-    use Rack::Ratelimit, name: 'POST',
+    use(Rack::Ratelimit, name: 'POST',
       exceptions: ->(env) { env['REQUEST_METHOD'] == 'GET' },
       rate:   [50, 10.seconds],
       cache:  Dalli::Client.new,
@@ -48,8 +48,8 @@ Rate-limit bursts of POST/PUT/DELETE requests by IP address
 
 Rate-limit API traffic by user (set by Rack::Auth::Basic)
 
-    use Rack::Ratelimit, name: 'API',
-      conditions: ->(env) { env['REMOTE_USER'] }
+    use(Rack::Ratelimit, name: 'API',
+      conditions: ->(env) { env['REMOTE_USER'] },
       rate:   [1000, 1.hour],
       cache:  Dalli::Client.new,
       logger: Rails.logger) { |env| env['REMOTE_USER'] }
