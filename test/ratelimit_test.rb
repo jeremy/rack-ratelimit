@@ -75,6 +75,13 @@ class RatelimitTest < Minitest::Test
     assert_rate_limited app.call({})
   end
 
+  def test_classify_may_be_overridden
+    app = Rack::Ratelimit.new(@app, rate: [1, 10], cache: @cache)
+    def app.classify(env) env['limit-by'] end
+    assert_equal 200, app.call('limit-by' => 'a').first
+    assert_equal 200, app.call('limit-by' => 'b').first
+  end
+
   def test_conditions_and_exceptions
     @limited.condition { |env| env['c1'] }
     @limited.condition { |env| env['c2'] }

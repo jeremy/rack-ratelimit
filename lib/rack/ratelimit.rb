@@ -92,6 +92,11 @@ module Rack
       @exceptions.none? { |e| e.call(env) } && @conditions.all? { |c| c.call(env) }
     end
 
+    # Give subclasses an opportunity to specialize classification.
+    def classify(env)
+      @classifier.call env
+    end
+
     # Handle a Rack request:
     #   * Check whether the rate limit applies to the request.
     #   * Classify the request by IP, API token, etc.
@@ -101,7 +106,7 @@ module Rack
     #   * If it's the first request that exceeds the limit, log it.
     #   * If the count doesn't exceed the limit, pass through the request.
     def call(env)
-      if apply_rate_limit?(env) && classification = @classifier.call(env)
+      if apply_rate_limit?(env) && classification = classify(env)
 
         # Marks the end of the current rate-limiting window.
         timestamp = @period * (Time.now.to_f / @period).ceil

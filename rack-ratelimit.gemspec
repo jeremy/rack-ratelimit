@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name    = 'rack-ratelimit'
-  s.version = '1.0.0'
+  s.version = '1.0.1'
   s.author  = 'Jeremy Kemper'
   s.email   = 'jeremy@bitsweat.net'
   s.summary = 'Flexible rate limits for your Rack apps'
