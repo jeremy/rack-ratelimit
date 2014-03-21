@@ -1,12 +1,11 @@
 require 'rubygems'
 require 'bundler/setup'
-require 'minitest/unit'
-MiniTest::Unit.autorun
+require 'minitest/autorun'
 
 require 'rack/ratelimit'
 require 'stringio'
 
-class RatelimitTest < MiniTest::Unit::TestCase
+class RatelimitTest < Minitest::Test
   def setup
     @cache = Dalli::Client.new('localhost:11211').tap(&:flush)
     @logger = Logger.new(@out = StringIO.new)

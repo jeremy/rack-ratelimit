@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'dalli'
 
   s.add_development_dependency 'rake'
-  s.add_development_dependency 'minitest'
+  s.add_development_dependency 'minitest', '~> 5.3.0'
 
-  s.files = Dir["#{File.dirname(__FILE__)}/**/*"]
+  s.files = Dir["#{File.dirname(__FILE__)}/lib/**/*"]
 end
