@@ -19,9 +19,15 @@ Rack env, return a string such as IP address, API token, etc. If the
 block returns nil, the request won't be rate-limited. If a block is
 not given, all requests get the same limits.
 
-Options:
+Required configuration:
 * rate: an array of [max requests, period in seconds]: [500, 5.minutes]
-* cache: a Dalli::Client instance, or an object that quacks like it.
+
+and one of
+* cache: a Dalli::Client instance
+* redis: a Redis instance
+* counter: Your own custom counter. Must respond to `#increment(classification_string, end_of_time_window_timestamp)` and return the counter value after increment.
+
+Optional configuration:
 * name: name of the rate limiter. Defaults to 'HTTP'. Used in messages.
 * conditions: array of procs that take a rack env, all of which must
     return true to rate-limit the request.
@@ -51,5 +57,5 @@ Rate-limit API traffic by user (set by Rack::Auth::Basic)
     use(Rack::Ratelimit, name: 'API',
       conditions: ->(env) { env['REMOTE_USER'] },
       rate:   [1000, 1.hour],
-      cache:  Dalli::Client.new,
+      redis:  Redis.new(ratelimit_redis_config),
       logger: Rails.logger) { |env| env['REMOTE_USER'] }
