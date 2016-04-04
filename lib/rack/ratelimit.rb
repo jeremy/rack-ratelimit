@@ -1,4 +1,3 @@
-require 'dalli'
 require 'logger'
 require 'time'
 
@@ -10,9 +9,9 @@ module Rack
   # * Apply each rate limit by request characteristics: IP, subdomain, OAuth2 token, etc.
   # * Flexible time window to limit burst traffic vs hourly or daily traffic:
   #     100 requests per 10 sec, 500 req/minute, 10000 req/hour, etc.
-  # * Fast, low-overhead implementation using memcache counters per time window:
+  # * Fast, low-overhead implementation using counters per time window:
   #     timeslice = window * ceiling(current time / window)
-  #     memcache.incr(counter for timeslice)
+  #     store.incr(timeslice)
   class Ratelimit
     # Takes a block that classifies requests for rate limiting. Given a
     # Rack env, return a string such as IP address, API token, etc. If the
@@ -21,7 +20,12 @@ module Rack
     #
     # Required configuration:
     #   rate: an array of [max requests, period in seconds]: [500, 5.minutes]
-    #   cache: a Dalli::Client instance, or an object that quacks like it.
+    # and one of
+    #   cache: a Dalli::Client instance
+    #   redis: a Redis instance
+    #   counter: Your own custom counter. Must respond to
+    #     `#increment(classification_string, end_of_time_window_timestamp)`
+    #     and return the counter value after increment.
     #
     # Optional configuration:
     #   name: name of the rate limiter. Defaults to 'HTTP'. Used in messages.
@@ -51,7 +55,7 @@ module Rack
     #   use(Rack::Ratelimit, name: 'API',
     #     conditions: ->(env) { env['REMOTE_USER'] },
     #     rate:   [1000, 1.hour],
-    #     cache:  Dalli::Client.new,
+    #     redis:  Redis.new(ratelimit_redis_config),
     #     logger: Rails.logger) { |env| env['REMOTE_USER'] }
     def initialize(app, options, &classifier)
       @app, @classifier = app, classifier
@@ -61,7 +65,17 @@ module Rack
       @max, @period = options.fetch(:rate)
       @status = options.fetch(:status, 429)
 
-      @counter = Counter.new(options.fetch(:cache), @name, @period)
+      @counter =
+        if counter = options[:counter]
+          raise ArgumentError, 'Counter must respond to #increment' unless counter.respond_to?(:increment)
+          counter
+        elsif cache = options[:cache]
+          MemcachedCounter.new(cache, @name, @period)
+        elsif redis = options[:redis]
+          RedisCounter.new(redis, @name, @period)
+        else
+          raise ArgumentError, ':cache, :redis, or :counter is required'
+        end
 
       @logger = options[:logger]
       @error_message = options.fetch(:error_message, "#{@name} rate limit exceeded. Please wait #{@period} seconds then retry your request.")
@@ -140,7 +154,7 @@ module Rack
       end
     end
 
-    class Counter
+    class MemcachedCounter
       def initialize(cache, name, period)
         @cache, @name, @period = cache, name, period
       end
@@ -161,6 +175,24 @@ module Rack
         else
           @cache.incr(key, 1).to_i
         end
+      end
+    end
+
+    class RedisCounter
+      def initialize(redis, name, period)
+        @redis, @name, @period = redis, name, period
+      end
+
+      # Increment the request counter and return the current count.
+      def increment(classification, timestamp)
+        key = 'rack-ratelimit/%s/%s/%i' % [@name, classification, timestamp]
+
+        # Returns [count, expire_ok] response for each multi command.
+        # Return the first, the count.
+        @redis.multi do |redis|
+          redis.incr key
+          redis.expire key, @period
+        end.first
       end
     end
   end
