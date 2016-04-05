@@ -1,15 +1,13 @@
 PATH
   remote: .
   specs:
-    rack-ratelimit (1.1.0)
-      rack
+    rack-ratelimit (1.1.1)
 
 GEM
   remote: https://rubygems.org/
   specs:
     dalli (2.7.6)
     minitest (5.3.5)
-    rack (1.6.4)
     rake (11.1.2)
     redis (3.2.2)
 
