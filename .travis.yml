@@ -1,0 +1,8 @@
+---
+language: ruby
+services:
+- redis-server
+- memcached
+rvm:
+- 2.3.0
+- ruby-head
