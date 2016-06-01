@@ -1,8 +1,14 @@
 ---
 language: ruby
+sudo: false
+
+cache:
+  bundler: true
+
 services:
 - redis-server
 - memcached
+
 rvm:
-- 2.3.0
+- 2.3.1
 - ruby-head
