@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name      = 'rack-ratelimit'
-  s.version   = '1.1.1'
+  s.version   = '1.1.2'
   s.author    = 'Jeremy Daer'
   s.email     = 'jeremydaer@gmail.com'
   s.homepage  = 'https://github.com/jeremy/rack-ratelimit'
