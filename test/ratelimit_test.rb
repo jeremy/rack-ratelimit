@@ -4,6 +4,7 @@ require 'minitest/autorun'
 
 require 'rack/ratelimit'
 require 'stringio'
+require 'json'
 
 require 'dalli'
 require 'redis'
@@ -25,9 +26,15 @@ module RatelimitTests
   def test_sets_informative_header_when_rate_limit_isnt_exceeded
     status, headers, body = @limited.call({})
     assert_equal 200, status
-    assert_match %r({"name":"one","period":10,"limit":1,"remaining":1,"until":".*"}), headers['X-Ratelimit']
+    assert_match %r({"name":"one","period":10,"limit":1,"remaining":0,"until":".*"}), headers['X-Ratelimit']
     assert_equal [], body
     assert_equal '', @out.string
+  end
+
+  def test_decrements_rate_limit_header_remaining_count
+    app = build_ratelimiter(@app, rate: [3, 10])
+    remainings = 5.times.map { JSON.parse(app.call({})[1]['X-Ratelimit'])['remaining'] }
+    assert_equal [2,1,0,0,0], remainings
   end
 
   def test_sets_multiple_informative_headers_for_each_rate_limiter
@@ -35,8 +42,8 @@ module RatelimitTests
     assert_equal 200, status
     info = headers['X-Ratelimit'].split("\n")
     assert_equal 2, info.size
-    assert_match %r({"name":"one","period":10,"limit":1,"remaining":1,"until":".*"}), info.first
-    assert_match %r({"name":"two","period":10,"limit":1,"remaining":1,"until":".*"}), info.last
+    assert_match %r({"name":"one","period":10,"limit":1,"remaining":0,"until":".*"}), info.first
+    assert_match %r({"name":"two","period":10,"limit":1,"remaining":0,"until":".*"}), info.last
     assert_equal [], body
     assert_equal '', @out.string
   end
