@@ -128,14 +128,14 @@ module Rack
 
         # Increment the request counter.
         count = @counter.increment(classification, timestamp)
-        remaining = @max - count + 1
+        remaining = @max - count
 
-        json = %({"name":"#{@name}","period":#{@period},"limit":#{@max},"remaining":#{remaining},"until":"#{time}"})
+        json = %({"name":"#{@name}","period":#{@period},"limit":#{@max},"remaining":#{remaining < 0 ? 0 : remaining},"until":"#{time}"})
 
         # If exceeded, return a 429 Rate Limit Exceeded response.
-        if remaining <= 0
+        if remaining < 0
           # Only log the first hit that exceeds the limit.
-          if @logger && remaining == 0
+          if @logger && remaining == -1
             @logger.info '%s: %s exceeded %d request limit for %s' % [@name, classification, @max, time]
           end
 
