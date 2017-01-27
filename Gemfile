@@ -4,7 +4,7 @@ gemspec
 
 # For tests only.
 gem 'rake'
-gem 'minitest', '~> 5.3.0'
+gem 'minitest'
 
 # Optional dependencies. Use Memcached or Redis.
 gem 'dalli'

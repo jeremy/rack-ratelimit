@@ -49,13 +49,17 @@ module RatelimitTests
   end
 
   def test_responds_with_429_if_request_rate_exceeds_limit
-    assert_equal 200, @limited.call('limit-by' => 'key').first
-    status, headers, body = @limited.call('limit-by' => 'key')
+    timestamp = Time.now.to_f
+    epoch = 10 * (timestamp / 10).ceil
+    retry_after = (epoch - timestamp).ceil
+
+    assert_equal 200, @limited.call('limit-by' => 'key', 'ratelimit.timestamp' => timestamp).first
+    status, headers, body = @limited.call('limit-by' => 'key', 'ratelimit.timestamp' => timestamp)
     assert_equal 429, status
-    assert_equal '10', headers['Retry-After']
+    assert_equal retry_after.to_s, headers['Retry-After']
     assert_match '0', headers['X-Ratelimit']
     assert_match %r({"name":"one","period":10,"limit":1,"remaining":0,"until":".*"}), headers['X-Ratelimit']
-    assert_equal 'one rate limit exceeded. Please wait 10 seconds then retry your request.', body.first
+    assert_equal "one rate limit exceeded. Please wait #{retry_after} seconds then retry your request.", body.first
     assert_match %r{one: classification exceeded 1 request limit for}, @out.string
   end
 
