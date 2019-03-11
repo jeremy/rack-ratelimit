@@ -138,6 +138,20 @@ module RatelimitTests
     end
 end
 
+module RatelimitBackendExceptionTests
+  def test_skip_tracking_on_backend_errors
+    app = Rack::Ratelimit.new \
+      ->(env) { [200, {}, []] },
+      ratelimit_options.merge(rate: [1, 10], logger: Logger.new(StringIO.new))
+
+    stubbing_backend_error do
+      remainings = 5.times.map { JSON.parse(app.call({})[1]['X-Ratelimit'])['remaining'] }
+
+      assert_equal [1,1,1,1,1], remainings
+    end
+  end
+end
+
 class RequiredBackendTest < Minitest::Test
   def test_backend_is_required
     assert_raises ArgumentError do
@@ -147,7 +161,7 @@ class RequiredBackendTest < Minitest::Test
 end
 
 class MemcachedRatelimitTest < Minitest::Test
-  include RatelimitTests
+  include RatelimitTests, RatelimitBackendExceptionTests
 
   def setup
     @cache = Dalli::Client.new('localhost:11211').tap(&:flush)
@@ -163,10 +177,16 @@ class MemcachedRatelimitTest < Minitest::Test
     def ratelimit_options
       super.merge cache: @cache
     end
+
+    def stubbing_backend_error
+      @cache.stub :incr, ->(key, value) { raise Dalli::DalliError } do
+        yield
+      end
+    end
 end
 
 class RedisRatelimitTest < Minitest::Test
-  include RatelimitTests
+  include RatelimitTests, RatelimitBackendExceptionTests
 
   def setup
     @redis = Redis.new(:host => 'localhost', :port => 6379, :db => 0).tap(&:flushdb)
@@ -179,6 +199,12 @@ class RedisRatelimitTest < Minitest::Test
   end
 
   private
+    def stubbing_backend_error
+      @redis.stub :multi, -> { raise Redis::BaseError } do
+        yield
+      end
+    end
+
     def ratelimit_options
       super.merge redis: @redis
     end
