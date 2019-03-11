@@ -204,6 +204,8 @@ module Rack
         else
           @cache.incr(key, 1).to_i
         end
+      rescue Dalli::DalliError
+        0
       end
     end
 
@@ -222,6 +224,8 @@ module Rack
           redis.incr key
           redis.expire key, @period
         end.first
+      rescue Redis::BaseError
+        0
       end
     end
   end
