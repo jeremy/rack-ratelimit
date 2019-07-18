@@ -202,6 +202,21 @@ class RedisRatelimitTest < Minitest::Test
     end
 end
 
+class NonThreadSafeCounter
+  def initialize(sleep_for = 0)
+    @counters = Hash.new do |classifications, name|
+      sleep sleep_for
+      classifications[name] = Hash.new do |timeslices, timestamp|
+        timeslices[timestamp] = 0
+      end
+    end
+  end
+
+  def increment(classification, timestamp)
+    @counters[classification][timestamp] += 1
+  end
+end
+
 class CustomCounterRatelimitTest < Minitest::Test
   include RatelimitTests
 
@@ -210,25 +225,21 @@ class CustomCounterRatelimitTest < Minitest::Test
       super.merge counter: Counter.new
     end
 
-  class Counter
-    def initialize(sleep_for = 0)
-      @counters = Hash.new do |classifications, name|
-        sleep sleep_for
-        classifications[name] = Hash.new do |timeslices, timestamp|
-          timeslices[timestamp] = 0
-        end
-      end
+  class Counter < ::NonThreadSafeCounter
+    def initialize(*)
+      super
+      @mutex = Mutex.new
     end
 
-    def increment(classification, timestamp)
-      @counters[classification][timestamp] += 1
+    def increment(*)
+      @mutex.synchronize { super }
     end
   end
 end
 
 class NonThreadSafeCustomCounterRatelimitTest < Minitest::Test
   def test_thread_safety
-    non_thread_safe_counter = CustomCounterRatelimitTest::Counter.new(0.01)
+    non_thread_safe_counter = NonThreadSafeCounter.new(0.01)
 
     app = Rack::Ratelimit.new(
       ->(env) { [200, {}, []] },
