@@ -65,20 +65,13 @@ module Rack
       @classifier ||= lambda { |env| :request }
 
       @name = options.fetch(:name, 'HTTP')
-      @max, @period = options.fetch(:rate)
+      @rate_input = options.fetch(:rate)
+      @max, @period = @rate_input unless @rate_input.respond_to?(:call)
       @status = options.fetch(:status, 429)
 
-      @counter =
-        if counter = options[:counter]
-          raise ArgumentError, 'Counter must respond to #increment' unless counter.respond_to?(:increment)
-          counter
-        elsif cache = options[:cache]
-          MemcachedCounter.new(cache, @name, @period)
-        elsif redis = options[:redis]
-          RedisCounter.new(redis, @name, @period)
-        else
-          raise ArgumentError, ':cache, :redis, or :counter is required'
-        end
+      @custom_counter = options[:counter]
+      @cache = options[:cache]
+      @redis = options[:redis]
 
       @logger = options[:logger]
       @error_message = options.fetch(:error_message, "#{@name} rate limit exceeded. Please wait %d seconds then retry your request.")
@@ -126,6 +119,9 @@ module Rack
       # Accept an optional start-of-request timestamp from the Rack env for
       # upstream timing and for testing.
       now = env.fetch('ratelimit.timestamp', Time.now).to_f
+
+      set_rate_params(env) if @rate_input.respond_to?(:call)
+      set_counter
 
       if apply_rate_limit?(env) && classification = classify(env)
         # Increment the request counter.
@@ -181,6 +177,25 @@ module Rack
 
       def amend_headers(headers, name, value)
         headers[name] = [headers[name], value].compact.join("\n")
+      end
+
+      def set_rate_params(env)
+        @max, @period = @rate_input.call(env)
+        err = 'The rate proc return a value in the shape of: [max requests, period in seconds]'
+        raise err if @max.nil? && @period.nil?
+      end
+
+      def set_counter
+        if @custom_counter
+          raise ArgumentError, 'Counter must respond to #increment' unless @custom_counter.respond_to?(:increment)
+          @counter = @custom_counter
+        elsif @cache
+          @counter = MemcachedCounter.new(@cache, @name, @period)
+        elsif @redis
+          @counter = RedisCounter.new(@redis, @name, @period)
+        else
+          raise ArgumentError, ':cache, :redis, or :counter is required'
+        end
       end
 
     class MemcachedCounter
