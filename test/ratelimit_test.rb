@@ -119,6 +119,24 @@ module RatelimitTests
     assert_not_rate_limited app.call('c' => nil)
   end
 
+  def test_thread_safety
+    app = build_ratelimiter(@app)
+
+    responses = []
+
+    10.times.map do
+      Thread.new do
+        responses << app.call({})
+      end
+    end.each(&:join)
+
+    success_responses, client_error_responses = responses.partition { |r| r[0] == 200 }
+
+    # ensure only one request was successful
+    assert_equal 1, success_responses.size
+    assert_equal true, client_error_responses.all? { |r| r[0] == 429 }
+  end
+
   private
     def assert_not_rate_limited(response)
       assert_nil response[1]['X-Ratelimit']
@@ -210,6 +228,21 @@ class RedisRatelimitTest < Minitest::Test
     end
 end
 
+class NonThreadSafeCounter
+  def initialize(sleep_for = 0)
+    @counters = Hash.new do |classifications, name|
+      sleep sleep_for
+      classifications[name] = Hash.new do |timeslices, timestamp|
+        timeslices[timestamp] = 0
+      end
+    end
+  end
+
+  def increment(classification, timestamp)
+    @counters[classification][timestamp] += 1
+  end
+end
+
 class CustomCounterRatelimitTest < Minitest::Test
   include RatelimitTests
 
@@ -218,17 +251,37 @@ class CustomCounterRatelimitTest < Minitest::Test
       super.merge counter: Counter.new
     end
 
-  class Counter
-    def initialize
-      @counters = Hash.new do |classifications, name|
-        classifications[name] = Hash.new do |timeslices, timestamp|
-          timeslices[timestamp] = 0
-        end
-      end
+  class Counter < ::NonThreadSafeCounter
+    def initialize(*)
+      super
+      @mutex = Mutex.new
     end
 
-    def increment(classification, timestamp)
-      @counters[classification][timestamp] += 1
+    def increment(*)
+      @mutex.synchronize { super }
     end
+  end
+end
+
+class NonThreadSafeCustomCounterRatelimitTest < Minitest::Test
+  def test_thread_safety
+    non_thread_safe_counter = NonThreadSafeCounter.new(0.01)
+
+    app = Rack::Ratelimit.new(
+      ->(env) { [200, {}, []] },
+      rate: [1, 10],
+      counter: non_thread_safe_counter,
+    ) { 'classification' }
+
+    responses = []
+
+    10.times.map do
+      Thread.new do
+        responses << app.call({})
+      end
+    end.each(&:join)
+
+    more_than_one_successful_request = responses.count { |r| r[0] == 200 } > 1
+    assert_equal true, more_than_one_successful_request
   end
 end
